@@ -7,7 +7,7 @@ def test_home():
     response = client.get("/")
 
     assert response.status_code == 200
-    assert b"Hello from Jenkins CI/CD - Version 2!" in response.data
+    assert b"Hello from Jenkins Level 2!" in response.data
 
 
 def test_health():

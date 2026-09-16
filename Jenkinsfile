@@ -1,55 +1,65 @@
 pipeline {
 
-    agent any
+    agent {
+        label 'docker-agent'
+    }
 
     environment {
-        IMAGE_NAME = "jenkins-demo-app"
-        TEST_IMAGE = "jenkins-demo-app-test"
-        CONTAINER_NAME = "jenkins-demo-container"
+        IMAGE_NAME = 'jenkins-demo-app'
+        CONTAINER_NAME = 'jenkins-demo-container'
 
-        HOST_PORT = "5001"
-        CONTAINER_PORT = "5000"
+        HOST_PORT = '5001'
+        CONTAINER_PORT = '5000'
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                echo 'Checking out source code...'
                 checkout scm
             }
         }
 
-
-        stage('Test') {
+        stage('Environment') {
             steps {
                 sh '''
-                    docker build \
-                        -t ${TEST_IMAGE}:${BUILD_NUMBER} \
-                        --target test \
-                        .
+                    echo "=== Agent ==="
+                    hostname
 
-                    docker run --rm \
-                        ${TEST_IMAGE}:${BUILD_NUMBER}
+                    echo "=== Python ==="
+                    python3 --version
+
+                    echo "=== Docker ==="
+                    docker version
                 '''
             }
         }
 
+        stage('Test') {
+            steps {
+                sh '''
+                    python3 -m venv venv
+
+                    ./venv/bin/pip install \
+                        --no-cache-dir \
+                        -r requirements.txt
+
+                    ./venv/bin/pytest -v
+                '''
+            }
+        }
 
         stage('Docker Build') {
             steps {
                 sh '''
                     docker build \
                         -t ${IMAGE_NAME}:${BUILD_NUMBER} \
-                        -t ${IMAGE_NAME}:latest \
-                        --target runtime \
                         .
                 '''
             }
         }
 
-
-        stage('Run Container') {
+        stage('Deploy') {
             steps {
                 sh '''
                     docker rm -f ${CONTAINER_NAME} 2>/dev/null || true
@@ -62,25 +72,17 @@ pipeline {
             }
         }
 
-
         stage('Health Check') {
             steps {
                 sh '''
-                    sleep 5
+                    sleep 3
 
-                    docker exec ${CONTAINER_NAME} \
-                        python -c "
-import urllib.request
-response = urllib.request.urlopen(
-    'http://localhost:${CONTAINER_PORT}/health'
-)
-print(response.read().decode())
-"
+                    curl -f \
+                        http://host.docker.internal:${HOST_PORT}/health
                 '''
             }
         }
     }
-
 
     post {
 
