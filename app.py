@@ -5,7 +5,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Hello from Jenkins Level 2! -Version 2"
+    return "Hello from Jenkins Level 2! -Version 3"
 
 
 @app.route("/health")
