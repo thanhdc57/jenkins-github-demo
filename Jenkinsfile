@@ -3,10 +3,12 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = 'jenkins-demo-app'
-        CONTAINER_NAME = 'jenkins-demo-app'
-        HOST_PORT = '5001'
-        CONTAINER_PORT = '5000'
+        IMAGE_NAME = "jenkins-demo-app"
+        TEST_IMAGE = "jenkins-demo-app-test"
+        CONTAINER_NAME = "jenkins-demo-container"
+
+        HOST_PORT = "5001"
+        CONTAINER_PORT = "5000"
     }
 
     stages {
@@ -18,32 +20,36 @@ pipeline {
             }
         }
 
+
         stage('Test') {
             steps {
                 sh '''
+                    docker build \
+                        -t ${TEST_IMAGE}:${BUILD_NUMBER} \
+                        --target test \
+                        .
+
                     docker run --rm \
-                        -v "$WORKSPACE:/app" \
-                        -w /app \
-                        python:3.12-slim \
-                        sh -c "
-                            pip install --no-cache-dir -r requirements.txt &&
-                            pytest -v
-                        "
+                        ${TEST_IMAGE}:${BUILD_NUMBER}
                 '''
             }
         }
+
 
         stage('Docker Build') {
             steps {
                 sh '''
                     docker build \
                         -t ${IMAGE_NAME}:${BUILD_NUMBER} \
+                        -t ${IMAGE_NAME}:latest \
+                        --target runtime \
                         .
                 '''
             }
         }
 
-        stage('Deploy') {
+
+        stage('Run Container') {
             steps {
                 sh '''
                     docker rm -f ${CONTAINER_NAME} 2>/dev/null || true
@@ -56,38 +62,44 @@ pipeline {
             }
         }
 
+
         stage('Health Check') {
             steps {
                 sh '''
                     sleep 5
 
-                    curl -f \
-                        http://host.docker.internal:${HOST_PORT}/health
-
-                    echo "Health check passed."
+                    docker exec ${CONTAINER_NAME} \
+                        python -c "
+import urllib.request
+response = urllib.request.urlopen(
+    'http://localhost:${CONTAINER_PORT}/health'
+)
+print(response.read().decode())
+"
                 '''
             }
         }
     }
+
 
     post {
 
         success {
             echo '===================================='
             echo 'PIPELINE SUCCESS'
-            echo 'Application deployed successfully'
             echo '===================================='
         }
 
         failure {
             echo '===================================='
             echo 'PIPELINE FAILED'
-            echo 'Check the stage logs'
             echo '===================================='
         }
 
         always {
-            sh 'docker ps || true'
+            sh '''
+                docker ps -a
+            '''
         }
     }
 }
